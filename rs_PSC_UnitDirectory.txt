@@ -1,25 +1,26 @@
 //notes 
   Script Name : rs_PSC_UnitDirectory.txt
-  Client Name : Public Storage
+  Client Name : Public Storage Canada (100070122)
   Created On  : 2025-07-22
   Created By  : Beril Pehlivan
-  Description : YSR - Unit Directory
+  Description : YSR - Unit Directory with Discounts
   Modified On : 
 
 //end notes 
 
 
+
 //select display 
 
-select p.hmy, isNull(p.saddr1,'') PropertyName, 
+select p.hmy phmy, isNull(p.saddr1,'') PropertyName, p.scode Property_Code,
 	   u.sUnitDescription UnitCode,
-	   ut.hmy, ut.SDESC UnitType,
+	   ut.hmy uthmy, ut.SDESC UnitType,
 	   convert(numeric(8,2), isNull(u.dSqft, 0)) Area, 	   
 	   isNull(u.srent,0) Rent, 
 	   isnull(u.sDeposit0,'0') Deposit, 
 	   CONCAT(isnull(clu.text + ', ', ''), isnull(dlu.text + ',', ''), isnull(FeatureTypes.FeatureVal + ',', ''), AccessTypes.AccessVal) Attributes,
 	   u.iWalkOrder WalkOrder,
-	   UnitStatus.UnitStatusDisplay,
+	   UnitStatus.UnitStatusDisplay UnitStatusDisplay,
 	   case u.IRENTREADY when -1 then 'Yes' when 0 then 'No' end IsRentReady,
 	   case when UnitStatus.UnitStatusDisplay like 'Vacant%' then datediff(d, cast(UnitStatus.VacantStart as date), getDate())
 	        else 0
@@ -125,13 +126,14 @@ select p.hmy, isNull(p.saddr1,'') PropertyName,
   join chargtyp ct on ls.hchargecode = ct.hmy
   inner join property p on p.hmy = ls.hproperty
   where 1=1
-  --ls.hproperty in (964) -- or use your dynamic join to listprop here
+ --and p.hmy in (3)
  #conditions#
 ) discounts 
 on discounts.PropertyId = p.hmy
 and discounts.UnitTypeId = ut.hmy
 	WHERE 1=1 
-	#conditions#
+	--and p.hmy in (3)
+    #conditions#
 	ORDER BY PropertyName, len(u.scode), u.scode
 
 //end select 
