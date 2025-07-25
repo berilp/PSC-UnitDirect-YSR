@@ -13,6 +13,11 @@
 //select display 
 
 select p.hmy phmy, isNull(p.saddr1,'') PropertyName, p.scode Property_Code,
+  DATENAME(WEEKDAY, getdate()) + ', ' +
+  DATENAME(MONTH, getdate()) + ' ' +
+  CAST(DAY(getdate()) AS VARCHAR) + ', ' +
+  CAST(YEAR(getdate()) AS VARCHAR) 
+  AS ReportDateRange,
 	   u.sUnitDescription UnitCode,
 	   t.hmyperson AS 'residentid',
 	   RTRIM(t.scode) Tenant_Code,
