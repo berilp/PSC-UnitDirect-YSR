@@ -1,0 +1,266 @@
+//notes 
+  Script Name : rs_PSC_UnitDirectory.txt
+  Client Name : Public Storage Canada (100070122)
+  Created On  : 2025-07-22
+  Created By  : Beril Pehlivan
+  Description : YSR - Unit Directory with Discounts
+  Modified On : 18-Aug-2025 - Case#16867527 - Vishal Patil
+				Added code to pull the list of promotions or discounts on same line
+//end notes 
+
+//select header
+select p.hmy phmy, isNull(p.saddr1,'') PropertyName, p.scode Property_Code, u.scode,
+  DATENAME(WEEKDAY, getdate()) + ', ' +
+  DATENAME(MONTH, getdate()) + ' ' +
+  CAST(DAY(getdate()) AS VARCHAR) + ', ' +
+  CAST(YEAR(getdate()) AS VARCHAR) 
+  AS ReportDateRange,
+	   '#@@outputtype#' OutputType
+	from property p     
+	inner join unit u on p.hMy = u.hProperty 
+	inner join unittype ut on ut.hmy = u.hunittype 
+	LEFT OUTER JOIN label clu on clu.TYPE = 'PMLABEL' AND nullif(u.SFIELD0,'') = clu.element and clu.subtype = 'STORAGE CLIMATE TYPE'
+	LEFT OUTER JOIN label dlu on dlu.TYPE = 'PMLABEL' AND nullif(u.SFIELD1,'') = dlu.element and dlu.subtype = 'STORAGE DOOR TYPE'
+	/*Multi-select attributes*/
+	OUTER APPLY (SELECT stuff((select ', ' + ltrim(rtrim(isnull(flu.text, ''))) 
+				 FROM SSUnitAttributeXRef ss
+				 INNER JOIN label flu ON flu.element = ss.hAttribute 
+				 WHERE flu.subtype = 'STORAGE FEATURE TYPE' 
+				 AND ss.iAttributeType = 1 
+				 AND ss.hUnit = u.hMy
+				 for xml path('')),1,1,'') AS FeatureVal)  FeatureTypes
+
+	OUTER APPLY (SELECT stuff((select ', ' + ltrim(rtrim(isnull(alu.text, ''))) 
+				 FROM SSUnitAttributeXRef ss
+				 INNER JOIN label alu ON alu.element = ss.hAttribute 
+				 WHERE alu.subtype = 'STORAGE ACCESS TYPE' 
+				 AND ss.iAttributeType = 2 
+				 AND ss.hUnit = u.hMy
+				 for xml path('')),1,1,'') AS AccessVal) AccessTypes
+	left outer join unitxref ux ON ux.hMy =  (select top 1 ux2.hMy
+	                                          from unitxRef ux2
+									          inner join tenant t2 on t2.hMyPerson = ux2.hTenant and t2.iStatus NOT IN(7, 9)
+									          where ux2.hUnit = u.hMy
+											  order by isnull(ux2.bActive, 0), isnull(ux2.dtMoveIn, ux2.dtLeaseFrom)
+											  )    
+	left outer join tenant t on ux.htenant = t.hMyPerson
+	join (select u3.hmy,
+				 CASE u3.sstatus
+					when 'Occupied No Notice' Then 'Occupied' 
+					when 'Vacant Unrented Not Ready' Then 'Vacant (Not Ready)' 
+					when 'Vacant Unrented Ready' Then 'Vacant (Available Now)' 
+					when 'Vacant Rented Not Ready' Then case t3.iStatus 
+															when 6 then 'Applicant'
+															when 2 then 'Future'
+															else 'Vacant (Not Ready)' 
+														end
+					when 'Vacant Rented Ready' Then case t3.iStatus 
+									                    	when 6 then 'Applicant'
+									                    	when 2 then 'Future'
+									                    	else 'Vacant (Available Now)' 
+									                    end
+					when 'Notice Unrented' Then case when ux3.iNoticeType = 1 then 'Auction'
+					                                 else case isnull(u3.IRENTREADY, 0) when 0 Then 'Notice (Not Ready)' else  'Notice (Available Now)' end 
+												end
+					when 'Notice Rented' Then 'Notice (Not Ready)' 
+					when 'Excluded' Then 'Excluded'
+					when 'Down' Then 'Down'
+					when 'Admin' Then 'Admin'
+					when 'Model' Then 'Model'
+					else 'Vacant (Available Now)' 
+				 end UnitStatusDisplayOld,
+				 u3.sstatus UnitStatusDisplay,
+				 CASE u3.sstatus
+					when 'Occupied No Notice' Then 'Occupied' 
+					when 'Vacant Unrented Not Ready' Then 'Vacant' 
+					when 'Vacant Unrented Ready' Then 'Vacant' 
+					when 'Vacant Rented Not Ready' Then case t3.iStatus 
+															when 6 then 'Prospect'
+															when 2 then 'Future'
+															else 'Vacant' 
+														end
+					when 'Vacant Rented Ready' Then case t3.iStatus 
+									                    	when 6 then 'Prospect'
+									                    	when 2 then 'Future'
+									                    	else 'Vacant' 
+									                    end
+					when 'Notice Unrented' Then case when ux3.iNoticeType = 1 then 'Auction'
+					                                 else 'Notice'
+												end
+					when 'Notice Rented' Then 'Notice' 
+					when 'Excluded' Then 'Excluded'
+					else 'Vacant' 
+			     end UnitStatusFilter,
+				 case when firstus3.hMy = vacus3.hMy then firstus3.dtDateOccurred else vacus3.dtStart end VacantStart
+			from unit u3
+			left outer join unit_status nonvacus3 ON nonvacus3.hMy = (select max(nonvac.hMy) from unit_status nonvac where nonvac.hUnit = u3.hMy and nonvac.sStatus not like 'Vacant%')
+	        left outer join unit_status vacus3 ON vacus3.hMy = (select min(vac.hMy) from unit_status vac where (vac.hMy > nonvacus3.hMy or nonvacus3.hMy is null) and vac.hUnit = u3.hMy and vac.sStatus like 'Vacant%')
+			left outer join unit_status firstus3 ON firstus3.hMy = (select min(firstus.hMy) from unit_status firstus where firstus.hUnit = u3.hMy)
+			left outer join unitxref ux3 ON ux3.hMy =  (select top 1 ux4.hMy
+	                                                    from unitxRef ux4
+	        								            inner join tenant t4 on t4.hMyPerson = ux4.hTenant and t4.iStatus NOT IN(7, 9)
+	        								            where ux4.hUnit = u3.hMy
+	        										    order by isnull(ux4.bActive, 0), isnull(ux4.dtMoveIn, ux4.dtLeaseFrom)
+	        										    )    
+	        left outer join tenant t3 on ux3.htenant = t3.hMyPerson
+		) UnitStatus on UnitStatus.hmy = u.hmy
+        left join (
+  -- replace this with a CTE or inline view of your leasing specials query
+  select distinct
+    ls.hproperty as PropertyId,
+    ut.hmy as UnitTypeId,
+    ut.sdesc as UnitTypeDesc,
+    ls.sDesc as Description
+  from LeasingSpecials ls
+  join UNITTYPE ut on ls.hUnitType = ut.HMY
+  join chargtyp ct on ls.hchargecode = ct.hmy
+  inner join property p on p.hmy = ls.hproperty
+  where 1=1
+ #conditions#
+) discounts 
+on discounts.PropertyId = p.hmy
+and discounts.UnitTypeId = ut.hmy
+	WHERE 1=1 
+    #conditions#
+	ORDER BY PropertyName, Property_Code,  u.scode
+
+//end select 
+
+//select display 
+select	Distinct stuff((select  N', ' + case when ls.sDesc is NULL then '' else ls.sDesc  end  
+						from 	LeasingSpecials ls
+								join UNITTYPE ut1 on ls.hUnitType = ut1.HMY and ut1.hmy = ut.HMY
+								join chargtyp ct on ls.hchargecode = ct.hmy
+								inner join property p1 on p1.hmy = ls.hproperty and p1.hmy = p.hmy
+						where 1=1
+						for xml path('')
+						),1,1,''
+						) as Discount_Desc  /*Case16867527*/,
+		p.hmy phmy, isNull(p.saddr1,'') PropertyName, p.scode Property_Code,
+	   u.sUnitDescription UnitCode,
+	   u.scode,
+	   t.hmyperson AS 'residentid',
+	   RTRIM(t.scode) Tenant_Code,
+       RTRIM(t.sfirstname) Tenant_First_Name,
+       RTRIM(t.slastname) Tenant_Last_Name,
+       RTRIM(t.sfirstname)  + ' ' + RTRIM(t.slastname) Tenant_Full_Name,
+	   ut.hmy uthmy, ut.SDESC UnitType,
+	   convert(numeric(8,2), isNull(u.dSqft, 0)) Area, 	   
+	   isNull(u.srent,0) Rent, 
+		CONCAT(isnull(clu.text + ', ', ''), isnull(dlu.text + ',', ''), isnull(FeatureTypes.FeatureVal + ',', ''), AccessTypes.AccessVal) Attributes,
+	   UnitStatus.UnitStatusDisplay UnitStatusDisplay,
+	   case u.IRENTREADY when -1 then 'Yes' when 0 then 'No' end IsRentReady,
+	   case when UnitStatus.UnitStatusDisplay like 'Vacant%' then datediff(d, cast(UnitStatus.VacantStart as date), getDate())
+	        else 0
+	   end DaysVacant,
+       /*case when discounts.Description is NULL then '' else discounts.Description  end as Discount_Desc, Case16867527*/
+	   '#@@outputtype#' OutputType
+	from property p     
+	inner join unit u on p.hMy = u.hProperty 
+	inner join unittype ut on ut.hmy = u.hunittype 
+	LEFT OUTER JOIN label clu on clu.TYPE = 'PMLABEL' AND nullif(u.SFIELD0,'') = clu.element and clu.subtype = 'STORAGE CLIMATE TYPE'
+	LEFT OUTER JOIN label dlu on dlu.TYPE = 'PMLABEL' AND nullif(u.SFIELD1,'') = dlu.element and dlu.subtype = 'STORAGE DOOR TYPE'
+	/*Multi-select attributes*/
+	OUTER APPLY (SELECT stuff((select ', ' + ltrim(rtrim(isnull(flu.text, ''))) 
+				 FROM SSUnitAttributeXRef ss
+				 INNER JOIN label flu ON flu.element = ss.hAttribute 
+				 WHERE flu.subtype = 'STORAGE FEATURE TYPE' 
+				 AND ss.iAttributeType = 1 
+				 AND ss.hUnit = u.hMy
+				 for xml path('')),1,1,'') AS FeatureVal)  FeatureTypes
+
+	OUTER APPLY (SELECT stuff((select ', ' + ltrim(rtrim(isnull(alu.text, ''))) 
+				 FROM SSUnitAttributeXRef ss
+				 INNER JOIN label alu ON alu.element = ss.hAttribute 
+				 WHERE alu.subtype = 'STORAGE ACCESS TYPE' 
+				 AND ss.iAttributeType = 2 
+				 AND ss.hUnit = u.hMy
+				 for xml path('')),1,1,'') AS AccessVal) AccessTypes
+	left outer join unitxref ux ON ux.hMy =  (select top 1 ux2.hMy
+	                                          from unitxRef ux2
+									          inner join tenant t2 on t2.hMyPerson = ux2.hTenant and t2.iStatus NOT IN(7, 9)
+									          where ux2.hUnit = u.hMy
+											  order by isnull(ux2.bActive, 0), isnull(ux2.dtMoveIn, ux2.dtLeaseFrom)
+											  )    
+	left outer join tenant t on ux.htenant = t.hMyPerson
+	join (select u3.hmy,
+				 CASE u3.sstatus
+					when 'Occupied No Notice' Then 'Occupied' 
+					when 'Vacant Unrented Not Ready' Then 'Vacant (Not Ready)' 
+					when 'Vacant Unrented Ready' Then 'Vacant (Available Now)' 
+					when 'Vacant Rented Not Ready' Then case t3.iStatus 
+															when 6 then 'Applicant'
+															when 2 then 'Future'
+															else 'Vacant (Not Ready)' 
+														end
+					when 'Vacant Rented Ready' Then case t3.iStatus 
+									                    	when 6 then 'Applicant'
+									                    	when 2 then 'Future'
+									                    	else 'Vacant (Available Now)' 
+									                    end
+					when 'Notice Unrented' Then case when ux3.iNoticeType = 1 then 'Auction'
+					                                 else case isnull(u3.IRENTREADY, 0) when 0 Then 'Notice (Not Ready)' else  'Notice (Available Now)' end 
+												end
+					when 'Notice Rented' Then 'Notice (Not Ready)' 
+					when 'Excluded' Then 'Excluded'
+					when 'Down' Then 'Down'
+					when 'Admin' Then 'Admin'
+					when 'Model' Then 'Model'
+					else 'Vacant (Available Now)' 
+				 end UnitStatusDisplayOld,
+				 u3.sstatus UnitStatusDisplay,
+				 CASE u3.sstatus
+					when 'Occupied No Notice' Then 'Occupied' 
+					when 'Vacant Unrented Not Ready' Then 'Vacant' 
+					when 'Vacant Unrented Ready' Then 'Vacant' 
+					when 'Vacant Rented Not Ready' Then case t3.iStatus 
+															when 6 then 'Prospect'
+															when 2 then 'Future'
+															else 'Vacant' 
+														end
+					when 'Vacant Rented Ready' Then case t3.iStatus 
+									                    	when 6 then 'Prospect'
+									                    	when 2 then 'Future'
+									                    	else 'Vacant' 
+									                    end
+					when 'Notice Unrented' Then case when ux3.iNoticeType = 1 then 'Auction'
+					                                 else 'Notice'
+												end
+					when 'Notice Rented' Then 'Notice' 
+					when 'Excluded' Then 'Excluded'
+					else 'Vacant' 
+			     end UnitStatusFilter,
+				 case when firstus3.hMy = vacus3.hMy then firstus3.dtDateOccurred else vacus3.dtStart end VacantStart
+			from unit u3
+			left outer join unit_status nonvacus3 ON nonvacus3.hMy = (select max(nonvac.hMy) from unit_status nonvac where nonvac.hUnit = u3.hMy and nonvac.sStatus not like 'Vacant%')
+	        left outer join unit_status vacus3 ON vacus3.hMy = (select min(vac.hMy) from unit_status vac where (vac.hMy > nonvacus3.hMy or nonvacus3.hMy is null) and vac.hUnit = u3.hMy and vac.sStatus like 'Vacant%')
+			left outer join unit_status firstus3 ON firstus3.hMy = (select min(firstus.hMy) from unit_status firstus where firstus.hUnit = u3.hMy)
+			left outer join unitxref ux3 ON ux3.hMy =  (select top 1 ux4.hMy
+	                                                    from unitxRef ux4
+	        								            inner join tenant t4 on t4.hMyPerson = ux4.hTenant and t4.iStatus NOT IN(7, 9)
+	        								            where ux4.hUnit = u3.hMy
+	        										    order by isnull(ux4.bActive, 0), isnull(ux4.dtMoveIn, ux4.dtLeaseFrom)
+	        										    )    
+	        left outer join tenant t3 on ux3.htenant = t3.hMyPerson
+		) UnitStatus on UnitStatus.hmy = u.hmy
+/*        left join (
+  -- replace this with a CTE or inline view of your leasing specials query
+  select distinct
+    ls.hproperty as PropertyId,
+    ut.hmy as UnitTypeId,
+    ut.sdesc as UnitTypeDesc,
+    ls.sDesc as Description
+  from LeasingSpecials ls
+  join UNITTYPE ut on ls.hUnitType = ut.HMY
+  join chargtyp ct on ls.hchargecode = ct.hmy
+  inner join property p on p.hmy = ls.hproperty
+  where 1=1
+ --and p.hmy in (3)
+ #conditions#
+) discounts 
+on discounts.PropertyId = p.hmy
+and discounts.UnitTypeId = ut.hmy Commented against Case16867527*/
+	WHERE 1=1 
+    #conditions#
+	ORDER BY PropertyName, Property_Code,  u.scode
+//end select 
