@@ -132,7 +132,7 @@ select	Distinct stuff((select  N', ' + case when ls.sDesc is NULL then '' else l
 								join UNITTYPE ut1 on ls.hUnitType = ut1.HMY and ut1.hmy = ut.HMY
 								join chargtyp ct on ls.hchargecode = ct.hmy
 								inner join property p1 on p1.hmy = ls.hproperty and p1.hmy = p.hmy
-						where 1=1
+						where 1=1 and ls.sdesc not like 'DNU%'
 						for xml path('')
 						),1,1,''
 						) as Discount_Desc  /*Case16867527*/,
